@@ -1556,18 +1556,27 @@
     const f = e.target.files[0];
     if (!f) return;
     const reader = new FileReader();
+    // Step 3 line photos show whole loading rows that officers zoom into to read
+    // box codes, so they get a bigger resolution / quality budget than item and
+    // container photos, which are shot close-up.
+    const isLine = pendingFileTarget.kind === 'line';
     reader.onload = ev => {
       compressImage(ev.target.result, compressed => {
         if (pendingFileTarget.kind === 'step12') handlePhoto12Captured(pendingFileTarget.num, compressed);
         else if (pendingFileTarget.kind === 'line') handlePhotoLineCaptured(pendingFileTarget.idx, compressed);
         else if (pendingFileTarget.kind === 'container') handleContainerPhotoCaptured(pendingFileTarget.slot, compressed);
-      });
+      }, isLine ? 1600 : 1200, isLine ? 0.75 : 0.5);
     };
     reader.readAsDataURL(f);
   }
   fileInputCameraEl.addEventListener('change', _handleFileChange);
   fileInputGalleryEl.addEventListener('change', _handleFileChange);
-  function compressImage(dataUrl, cb){
+  // maxPx / quality are optional. Default 1200px @ 0.5 for item and container
+  // photos; Step 3 line photos pass 1600 @ 0.75 so loading rows stay legible
+  // when an officer zooms in (see _handleFileChange).
+  function compressImage(dataUrl, cb, maxPx, quality){
+    const MAX     = maxPx   || 1200;
+    const QUALITY = quality || 0.5;
     const img = new Image();
     img.onerror = () => {
       // If the image fails to decode (can happen on some phones), fall back
@@ -1579,14 +1588,13 @@
       try {
         const canvas = document.createElement('canvas');
         let w = img.width, h = img.height;
-        const MAX = 1200;
         if (w > MAX || h > MAX) {
           if (w > h) { h = Math.round(h / w * MAX); w = MAX; }
           else { w = Math.round(w / h * MAX); h = MAX; }
         }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const compressed = canvas.toDataURL('image/jpeg', 0.5);
+        const compressed = canvas.toDataURL('image/jpeg', QUALITY);
         // Sanity check: if canvas returned empty/broken data, use original
         cb((compressed && compressed.length > 100) ? compressed : dataUrl);
       } catch(e) {
